@@ -225,7 +225,7 @@
 </script>
 
 <svelte:head>
-  <title>Ringkasan Global - IoT Mangga</title>
+  <title>Dashboard - IoT Mangga</title>
 </svelte:head>
 
 <div class="py-8 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
