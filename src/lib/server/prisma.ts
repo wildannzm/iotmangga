@@ -1,4 +1,6 @@
-import PrismaPkg from '@prisma/client';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const PrismaPkg = require('@prisma/client');
 import type { PrismaClient } from '@prisma/client';
 const PrismaClientConstructor = PrismaPkg.PrismaClient;
 import { PrismaPg } from '@prisma/adapter-pg';
