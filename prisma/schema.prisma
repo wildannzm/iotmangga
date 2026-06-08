@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Transaction pooling configuration for Supabase
+datasource db {
+  provider  = "postgresql"
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  username     String    @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime  @default(now())
+  
+  sessions     Session[]
+  devices      Device[]
+}
+
+model Session {
+  id        String   @id // session token string
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+}
+
+model Device {
+  id          String       @id @default(uuid()) @db.Uuid
+  userId      String       @db.Uuid
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  apiKey      String       @unique
+  macAddress        String
+  firmwareVer       String
+  targetFirmwareId  String?      @db.Uuid
+  createdAt         DateTime     @default(now())
+  
+  targetFirmware    Firmware?    @relation(fields: [targetFirmwareId], references: [id], onDelete: SetNull)
+  sensorData        SensorData[]
+
+  @@index([apiKey])
+}
+
+model SensorData {
+  id        String   @id @default(uuid()) @db.Uuid
+  deviceId  String   @db.Uuid
+  device    Device   @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  moisture  Float
+  ph        Float
+  tds       Float
+  createdAt DateTime @default(now())
+
+  @@index([deviceId, createdAt])
+}
+
+model Firmware {
+  id           String   @id @default(uuid()) @db.Uuid
+  version      String   @unique
+  fileUrl      String
+  releaseNotes String?
+  createdAt    DateTime @default(now())
+
+  devices      Device[]
+}

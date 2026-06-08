@@ -1,0 +1,45 @@
+{
+	"name": "iotmangga",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"preview": "vite preview",
+		"prepare": "svelte-kit sync || echo ''",
+		"lint": "prettier --check .",
+		"format": "prettier --write ."
+	},
+	"devDependencies": {
+		"@sveltejs/adapter-auto": "^7.0.1",
+		"@sveltejs/kit": "^2.57.0",
+		"@sveltejs/vite-plugin-svelte": "^7.0.0",
+		"@tailwindcss/forms": "^0.5.11",
+		"@tailwindcss/typography": "^0.5.19",
+		"@tailwindcss/vite": "^4.2.2",
+		"@types/bcryptjs": "^2.4.6",
+		"@types/pg": "^8.20.0",
+		"dotenv": "^17.4.2",
+		"prettier": "^3.8.1",
+		"prettier-plugin-svelte": "^3.5.1",
+		"prettier-plugin-tailwindcss": "^0.7.2",
+		"prisma": "^7.8.0",
+		"svelte": "^5.55.2",
+		"svelte-check": "^4.6.0",
+		"tailwindcss": "^4.2.2",
+		"tslib": "^2.8.1",
+		"typescript": "^6.0.3",
+		"vite": "^8.0.7"
+	},
+	"dependencies": {
+		"@prisma/adapter-pg": "^7.8.0",
+		"@prisma/client": "^7.8.0",
+		"@supabase/supabase-js": "^2.107.0",
+		"bcryptjs": "^3.0.3",
+		"chart.js": "^4.5.1",
+		"pg": "^8.21.0",
+		"svelte-chartjs": "^4.0.1",
+		"xlsx": "^0.18.5"
+	}
+}
