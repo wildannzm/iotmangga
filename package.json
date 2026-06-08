@@ -8,6 +8,7 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
+		"postinstall": "prisma generate",
 		"lint": "prettier --check .",
 		"format": "prettier --write ."
 	},
