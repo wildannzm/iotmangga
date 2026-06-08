@@ -10,7 +10,7 @@ export const load: PageServerLoad = async ({ locals }) => {
 
   const devices = await prisma.device.findMany({
     where: { userId: locals.user.id },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { createdAt: 'asc' },
     // Include the latest sensor data if we want to show status later
     include: {
       sensorData: {
