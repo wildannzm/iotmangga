@@ -58,7 +58,6 @@ export const GET: RequestHandler = async ({ request }) => {
     });
 
   } catch (error: any) {
-    console.error('Error during Cron Cleanup:', error);
     return json({ error: 'Terjadi kesalahan sistem saat menjalankan pembersihan bulanan' }, { status: 500 });
   }
 };
