@@ -1,6 +1,84 @@
-import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
+import { prisma } from '$lib/server/prisma';
 
 export const load: PageServerLoad = async () => {
-  throw redirect(302, '/login');
+  // Fetch all Kebuns that have at least one published product
+  // Only expose safe public fields — no apiKey, passwordHash, macAddress, userId
+  const kebuns = await prisma.kebun.findMany({
+    where: {
+      devices: {
+        some: {
+          products: {
+            some: { isPublished: true }
+          }
+        }
+      }
+    },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      location: true,
+      devices: {
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          // 20 latest sensor readings for average calculation
+          sensorData: {
+            orderBy: { createdAt: 'desc' },
+            take: 20,
+            select: {
+              moisture: true,
+              ph: true,
+              tds: true,
+              createdAt: true
+            }
+          },
+          products: {
+            where: { isPublished: true },
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              imageUrl: true,
+              price: true,
+              stock: true,
+              unit: true,
+              harvestDate: true
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Pre-compute sensor averages server-side for each device
+  const storefrontData = kebuns.map((kebun) => ({
+    id: kebun.id,
+    name: kebun.name,
+    location: kebun.location,
+    devices: kebun.devices.map((device) => {
+      const count = device.sensorData.length;
+      const sensorAvg =
+        count > 0
+          ? {
+              moisture: device.sensorData.reduce((sum, s) => sum + s.moisture, 0) / count,
+              ph: device.sensorData.reduce((sum, s) => sum + s.ph, 0) / count,
+              tds: device.sensorData.reduce((sum, s) => sum + s.tds, 0) / count,
+              hasData: true
+            }
+          : { moisture: 0, ph: 0, tds: 0, hasData: false };
+
+      return {
+        id: device.id,
+        name: device.name,
+        sensorAvg,
+        products: device.products
+      };
+    })
+  }));
+
+  return { storefrontData };
 };

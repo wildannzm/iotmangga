@@ -43,6 +43,15 @@
               Manajemen Perangkat
             </a>
             <a
+              href="/dashboard/kebun"
+              class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors
+                {isActive('/dashboard/kebun', $page.url.pathname)
+                  ? 'border-amber-500 text-gray-900'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}"
+            >
+              Manajemen Kebun
+            </a>
+            <a
               href="/dashboard/firmware"
               class="inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors
                 {isActive('/dashboard/firmware', $page.url.pathname)
@@ -111,6 +120,14 @@
               {isActive('/dashboard/devices', $page.url.pathname) ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'}"
           >
             Manajemen Perangkat
+          </a>
+          <a
+            href="/dashboard/kebun"
+            onclick={() => isMobileMenuOpen = false}
+            class="block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors
+              {isActive('/dashboard/kebun', $page.url.pathname) ? 'bg-amber-50 border-amber-500 text-amber-700' : 'border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800'}"
+          >
+            Manajemen Kebun
           </a>
           <a
             href="/dashboard/firmware"
