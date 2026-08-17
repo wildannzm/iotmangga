@@ -7,27 +7,40 @@
 
   let storefrontData = $derived(data.storefrontData);
 
-  // Search
+  // Search & Location Filter State
   let searchQuery = $state('');
+  let activeLocation = $state('Semua');
 
-  // Live sensor indicator
-  let isConnected = $state(false); // WebSocket berhasil subscribe
-  let isLive = $state(false);      // Ada data sensor masuk
-  let lastUpdated = $state<Date | null>(null);
+  // Modals state
+  let isSensorModalOpen = $state(false);
+  let activeSensorDevice = $state<any>(null);
+  let activeSensorProduct = $state<any>(null);
+  let activeChartMetric = $state<'moisture' | 'ph' | 'tds'>('moisture');
+
+  let isImageViewerOpen = $state(false);
+  let activeImageProduct = $state<any>(null);
+
+  // Toast state
+  let toastMessage = $state('');
+  let showToastState = $state(false);
+
+  // Canvas element reference
+  let canvasElement: HTMLCanvasElement | null = $state(null);
+
+  // Live sensor indicator & Realtime updates
+  let isConnected = $state(false);
+  let isLive = $state(false);
   let recentlyUpdatedDeviceIds = $state<Set<string>>(new Set());
-
-  // Realtime sensor overrides per deviceId
   let realtimeSensorMap = $state<Record<string, { moisture: number; ph: number; tds: number; hasData: boolean }>>({});
 
   function getSensorAvg(device: { id: string; sensorAvg: { moisture: number; ph: number; tds: number; hasData: boolean } }) {
     return realtimeSensorMap[device.id] ?? device.sensorAvg;
   }
 
-  // Supabase realtime
+  // Supabase Realtime channel
   let channel: ReturnType<typeof supabase.channel> | null = null;
 
   onMount(() => {
-    // Fallback: setelah 3 detik anggap sudah terhubung
     const fallbackTimer = setTimeout(() => { isConnected = true; }, 3000);
 
     channel = supabase
@@ -35,7 +48,6 @@
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'SensorData' }, (payload) => {
         const incoming = payload.new as { deviceId: string; moisture: number; ph: number; tds: number };
 
-        // Find existing device initial sensorAvg
         let initialSensorAvg = { moisture: 0, ph: 0, tds: 0, hasData: false };
         for (const kebun of data.storefrontData) {
           const dev = kebun.devices.find(d => d.id === incoming.deviceId);
@@ -58,7 +70,6 @@
           : { moisture: incoming.moisture, ph: incoming.ph, tds: incoming.tds, hasData: true };
 
         isLive = true;
-        lastUpdated = new Date();
         recentlyUpdatedDeviceIds = new Set([...recentlyUpdatedDeviceIds, incoming.deviceId]);
         setTimeout(() => {
           recentlyUpdatedDeviceIds = new Set([...recentlyUpdatedDeviceIds].filter(id => id !== incoming.deviceId));
@@ -74,7 +85,7 @@
 
   onDestroy(() => { if (channel) supabase.removeChannel(channel); });
 
-  // All products flat list (for search/filter)
+  // Flat list of all products
   let allProducts = $derived(
     storefrontData.flatMap(kebun =>
       kebun.devices.flatMap(device =>
@@ -83,273 +94,644 @@
           kebunName: kebun.name,
           kebunId: kebun.id,
           kebunLocation: kebun.location,
+          waNumber: kebun.waNumber,
           deviceName: device.name,
           deviceId: device.id,
-          sensorAvg: getSensorAvg(device)
+          sensorAvg: getSensorAvg(device),
+          history: device.history
         }))
       )
     )
   );
 
+  // Available locations
+  let availableLocations = $derived([
+    'Semua',
+    ...Array.from(new Set(allProducts.map(p => p.kebunLocation).filter(Boolean)))
+  ]);
+
+  // Filtered products derived state
   let filteredProducts = $derived(() => {
     let results = allProducts;
+    if (activeLocation !== 'Semua') {
+      results = results.filter(p => p.kebunLocation === activeLocation);
+    }
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       results = results.filter(p =>
         p.name.toLowerCase().includes(q) ||
         (p.description ?? '').toLowerCase().includes(q) ||
-        p.kebunName.toLowerCase().includes(q)
+        p.kebunName.toLowerCase().includes(q) ||
+        p.kebunLocation.toLowerCase().includes(q)
       );
     }
     return results;
   });
 
-  let totalProducts = $derived(allProducts.length);
-  let totalKebun = $derived(storefrontData.length);
+  function getLocationProductCount(loc: string) {
+    if (loc === 'Semua') return allProducts.length;
+    return allProducts.filter(p => p.kebunLocation === loc).length;
+  }
 
   function formatPrice(price: number) {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(price);
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(price);
   }
 
-  function phLabel(ph: number) {
-    if (ph >= 5.5 && ph <= 7.5) return { label: 'Optimal', cls: 'bg-green-100 text-green-700' };
-    if ((ph >= 4.5 && ph < 5.5) || (ph > 7.5 && ph <= 8.5)) return { label: 'Cukup', cls: 'bg-yellow-100 text-yellow-700' };
-    return { label: 'Perhatian', cls: 'bg-red-100 text-red-700' };
+  // Sensor Telemetry Modal & Chart
+  function openSensorModal(product: any) {
+    activeSensorProduct = product;
+    activeSensorDevice = {
+      name: product.deviceName,
+      sensorAvg: product.sensorAvg,
+      history: product.history
+    };
+    activeChartMetric = 'moisture';
+    isSensorModalOpen = true;
+
+    setTimeout(() => {
+      drawSensorChart();
+    }, 100);
   }
 
-  function moistureLabel(m: number) {
-    if (m >= 40 && m <= 80) return { label: 'Optimal', cls: 'bg-green-100 text-green-700' };
-    if (m < 40) return { label: 'Kering', cls: 'bg-orange-100 text-orange-700' };
-    return { label: 'Basah', cls: 'bg-blue-100 text-blue-700' };
+  function closeSensorModal() {
+    isSensorModalOpen = false;
+  }
+
+  function switchChartMetric(metric: 'moisture' | 'ph' | 'tds') {
+    activeChartMetric = metric;
+    drawSensorChart();
+  }
+
+  function drawSensorChart() {
+    if (!canvasElement || !activeSensorDevice || !activeSensorDevice.history) return;
+
+    const ctx = canvasElement.getContext('2d');
+    if (!ctx) return;
+
+    const rect = canvasElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+
+    canvasElement.width = rect.width * dpr || 500;
+    canvasElement.height = rect.height * dpr || 200;
+
+    const width = canvasElement.width;
+    const height = canvasElement.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    const history = activeSensorDevice.history;
+    const dates = history.dates && history.dates.length ? history.dates : ['01/08', '02/08', '03/08', '04/08', '05/08', '06/08', '07/08'];
+    const rawValues = history[activeChartMetric] && history[activeChartMetric].length
+      ? history[activeChartMetric]
+      : (activeChartMetric === 'moisture' ? [70, 72, 75, 74, 76, 75, 75] : activeChartMetric === 'ph' ? [6.8, 6.9, 7.0, 7.1, 7.0, 7.2, 7.1] : [160, 165, 170, 172, 175, 176, 177]);
+
+    const paddingLeft = 45 * dpr;
+    const paddingRight = 20 * dpr;
+    const paddingTop = 20 * dpr;
+    const paddingBottom = 35 * dpr;
+
+    const minVal = Math.min(...rawValues) * 0.85;
+    const maxVal = Math.max(...rawValues) * 1.15 || 1;
+
+    const chartW = width - paddingLeft - paddingRight;
+    const chartH = height - paddingTop - paddingBottom;
+
+    // Grid lines & Y Axis labels
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.font = `${10 * dpr}px Inter, sans-serif`;
+
+    const steps = 4;
+    for (let i = 0; i <= steps; i++) {
+      const y = paddingTop + (chartH / steps) * i;
+      const val = (maxVal - ((maxVal - minVal) / steps) * i).toFixed(1);
+
+      ctx.beginPath();
+      ctx.moveTo(paddingLeft, y);
+      ctx.lineTo(width - paddingRight, y);
+      ctx.stroke();
+
+      ctx.fillText(val, 5 * dpr, y + 3);
+    }
+
+    // Calculate coordinates
+    const points = rawValues.map((val: number, idx: number) => {
+      const x = paddingLeft + (chartW / (rawValues.length - 1 || 1)) * idx;
+      const y = paddingTop + chartH - ((val - minVal) / (maxVal - minVal || 1)) * chartH;
+      return { x, y, val, date: dates[idx] ?? '' };
+    });
+
+    // Fill Gradient
+    const gradient = ctx.createLinearGradient(0, paddingTop, 0, height - paddingBottom);
+    if (activeChartMetric === 'moisture') {
+      gradient.addColorStop(0, 'rgba(59, 130, 246, 0.35)');
+      gradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+    } else if (activeChartMetric === 'ph') {
+      gradient.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
+      gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
+    } else {
+      gradient.addColorStop(0, 'rgba(168, 85, 247, 0.35)');
+      gradient.addColorStop(1, 'rgba(168, 85, 247, 0.0)');
+    }
+
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, height - paddingBottom);
+    points.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(points[points.length - 1].x, height - paddingBottom);
+    ctx.closePath();
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // Draw Chart Line
+    ctx.beginPath();
+    points.forEach((p, idx) => {
+      if (idx === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+
+    ctx.strokeStyle = activeChartMetric === 'moisture' ? '#3b82f6' : activeChartMetric === 'ph' ? '#10b981' : '#a855f7';
+    ctx.lineWidth = 3 * dpr;
+    ctx.stroke();
+
+    // Points and X Axis Labels
+    points.forEach(p => {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.fillText(p.date, p.x - (12 * dpr), height - (10 * dpr));
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5 * dpr, 0, Math.PI * 2);
+      ctx.fillStyle = '#0f172a';
+      ctx.fill();
+      ctx.strokeStyle = activeChartMetric === 'moisture' ? '#3b82f6' : activeChartMetric === 'ph' ? '#10b981' : '#a855f7';
+      ctx.lineWidth = 2 * dpr;
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = `bold ${9 * dpr}px Inter, sans-serif`;
+      ctx.fillText(String(p.val), p.x - (8 * dpr), p.y - (8 * dpr));
+    });
+  }
+
+  // Image Viewer Modal
+  function openImageViewer(product: any) {
+    activeImageProduct = product;
+    isImageViewerOpen = true;
+  }
+
+  function closeImageViewer() {
+    isImageViewerOpen = false;
+  }
+
+  // WhatsApp Direct Order Flow
+  function orderViaWA(product: any) {
+    const formattedPrice = formatPrice(product.price);
+    const waPhone = product.waNumber || '6281234567890';
+    const message = `Halo ${product.kebunName}! Saya berminat memesan produk berikut:%0A%0A` +
+                    `🥭 *Produk:* ${product.name}%0A` +
+                    `📍 *Kebun Lokasi:* ${product.kebunLocation}%0A` +
+                    `💰 *Harga:* ${formattedPrice}/${product.unit}%0A%0A` +
+                    `Mohon informasi stok dan cara pengiriman. Terima kasih!`;
+
+    const waUrl = `https://wa.me/${waPhone}?text=${message}`;
+
+    triggerToast(`Membuka WhatsApp untuk memesan ${product.name}`);
+
+    setTimeout(() => {
+      window.open(waUrl, '_blank');
+    }, 800);
+  }
+
+  function triggerToast(text: string) {
+    toastMessage = text;
+    showToastState = true;
+    setTimeout(() => {
+      showToastState = false;
+    }, 3000);
   }
 </script>
 
 <svelte:head>
-  <title>Etalase Mangga Segar — IoT Mangga</title>
-  <meta name="description" content="Beli mangga segar langsung dari kebun IoT terverifikasi. Kualitas tanah terpantau realtime." />
+  <title>MangoFresh - IoT Mango Marketplace</title>
+  <meta name="description" content="Platform e-commerce mangga berbasis IoT. Data sensor terverifikasi realtime." />
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </svelte:head>
 
-<div style="font-family: 'Inter', sans-serif;" class="min-h-screen bg-gray-50">
+<div style="font-family: 'Inter', sans-serif;" class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased">
 
-  <!-- ===== TOP BAR ===== -->
-  <div class="bg-orange-500 text-white text-xs py-1.5 text-center font-medium tracking-wide">
-    🥭 Kualitas mangga terverifikasi sensor IoT realtime &nbsp;·&nbsp; Langsung dari kebun ke tangan Anda
+  <!-- TOP ANNOUNCEMENT BAR -->
+  <div class="bg-orange-600 text-white text-xs sm:text-sm py-2 px-4 text-center font-medium tracking-wide shadow-sm flex items-center justify-center gap-2">
+    <span>🥭</span>
+    <span>Kualitas mangga terverifikasi sensor IoT realtime · Langsung dari kebun ke tangan Anda</span>
   </div>
 
-  <!-- ===== STICKY HEADER ===== -->
-  <header class="sticky top-0 z-50 bg-white shadow-sm border-b border-gray-100">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center gap-4 h-16">
-        <!-- Logo -->
-        <a href="/" class="flex items-center gap-2 flex-shrink-0">
-          <span class="text-2xl">🥭</span>
-          <span class="font-extrabold text-orange-500 text-lg leading-none">Mango<span class="text-green-600">Fresh</span></span>
-        </a>
-
-        <!-- Search Bar -->
-        <div class="flex-1 max-w-2xl">
-          <div class="relative">
-            <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0" />
-            </svg>
-            <input
-              id="search-input"
-              type="text"
-              placeholder="Cari mangga, kebun, atau varietas..."
-              bind:value={searchQuery}
-              class="w-full pl-10 pr-4 py-2.5 bg-gray-100 border border-transparent rounded-full text-sm focus:outline-none focus:bg-white focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition-all"
-            />
-          </div>
+  <!-- STICKY HEADER -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <!-- Logo -->
+      <a href="/" class="flex items-center gap-2 group shrink-0">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+          <span class="text-xl">🥭</span>
         </div>
+        <span class="text-xl font-extrabold tracking-tight text-slate-900">
+          Mango<span class="text-orange-600">Fresh</span>
+        </span>
+      </a>
 
+      <!-- Global Search Box -->
+      <div class="flex-1 max-w-xl">
+        <div class="relative">
+          <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+          <input
+            type="text"
+            bind:value={searchQuery}
+            placeholder="Cari mangga, kebun, atau varietas..."
+            class="w-full pl-10 pr-4 py-2 bg-slate-100 hover:bg-slate-50 focus:bg-white text-slate-800 placeholder-slate-400 rounded-full text-sm border border-transparent focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200 transition-all"
+          />
+        </div>
+      </div>
+
+      <!-- Header Badge Info -->
+      <div class="hidden sm:flex items-center gap-3 text-xs font-semibold text-slate-600">
+        <div class="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-full border border-emerald-200">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span>IoT Sensor Active</span>
+        </div>
       </div>
     </div>
   </header>
 
-  <!-- ===== HERO BANNER ===== -->
-  <section class="relative overflow-hidden bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-300">
-    <div class="absolute inset-0 overflow-hidden pointer-events-none">
-      <div class="absolute -right-16 top-1/2 -translate-y-1/2 text-[200px] opacity-10 select-none">🥭</div>
-      <div class="absolute right-48 -top-8 text-[80px] opacity-10 rotate-12 select-none">🌿</div>
-    </div>
-    <div class="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-      <div class="max-w-lg">
-        <h1 class="text-3xl sm:text-4xl font-extrabold text-white leading-tight drop-shadow">
-          Mangga Segar<br/>Langsung dari Kebun
+  <!-- HERO BANNER -->
+  <section class="bg-gradient-to-r from-orange-600 via-orange-500 to-amber-400 text-white py-10 md:py-14 px-4 sm:px-6 lg:px-8 relative overflow-hidden shadow-inner">
+    <div class="max-w-7xl mx-auto relative z-10">
+      <div class="max-w-2xl">
+        <h1 class="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight leading-tight mb-3 text-white drop-shadow-sm">
+          Mangga Segar<br class="hidden sm:inline"> Langsung dari Kebun
         </h1>
-        <p class="mt-3 text-white/90 text-sm sm:text-base leading-relaxed">
-          Setiap produk dilengkapi data sensor tanah realtime — kelembapan, pH, dan nutrisi — sehingga kualitas benar-benar terverifikasi.
+        <p class="text-orange-50 text-base sm:text-lg leading-relaxed font-normal opacity-95">
+          Setiap produk dilengkapi data sensor tanah realtime — kelembapan, pH, dan nutrisi — sehingga kualitas benar-benar terverifikasi secara presisi.
         </p>
-        <div class="mt-5 flex flex-wrap gap-3">
-          {#if lastUpdated}
-            <div class="bg-white/20 backdrop-blur rounded-xl px-4 py-2 text-white text-center">
-              <p class="text-xs font-bold">Update Terakhir</p>
-              <p class="text-xs text-white/80">{lastUpdated.toLocaleTimeString('id-ID')}</p>
-            </div>
-          {/if}
-        </div>
       </div>
+    </div>
+    <div class="absolute right-4 -bottom-10 opacity-15 pointer-events-none hidden md:block">
+      <svg width="320" height="320" viewBox="0 0 200 200" fill="currentColor" class="text-yellow-200">
+        <path d="M44.7,-58.2C56.6,-47.5,64.2,-31.8,67.8,-15.1C71.4,1.6,71,19.3,63.1,33.4C55.2,47.5,39.8,58,22.8,64.3C5.8,70.5,-12.8,72.4,-29.4,66.5C-46,60.6,-60.7,46.8,-68.2,29.7C-75.7,12.6,-76,-7.9,-69.5,-25.1C-63,-42.2,-49.6,-56.1,-34.5,-65.4C-19.4,-74.6,-2.6,-79.3,12.8,-75.7C28.2,-72.1,32.8,-68.9,44.7,-58.2Z" transform="translate(100 100)" />
+      </svg>
     </div>
   </section>
 
-  <!-- ===== MAIN CONTENT ===== -->
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-
-    {#if totalProducts === 0}
-      <!-- ===== EMPTY STATE ===== -->
-      <div class="flex flex-col items-center justify-center py-24 text-center">
-        <div class="h-28 w-28 rounded-full bg-orange-50 flex items-center justify-center mb-5 border-4 border-orange-100">
-          <span class="text-5xl">🌱</span>
+    <!-- Filter Controls Container -->
+    <div class="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200/80 mb-8 space-y-4">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-2 border-b border-slate-100">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+            <i class="fa-solid fa-location-dot text-orange-500"></i>
+            Pilih Lokasi Kebun Mangga
+          </h2>
+          <p class="text-xs text-slate-500 mt-0.5">Klik filter lokasi di bawah ini untuk menyaring produk secara presisi</p>
         </div>
-        <h2 class="text-xl font-bold text-gray-700 mb-2">Belum ada produk tersedia</h2>
-        <p class="text-gray-400 text-sm max-w-sm">Produk mangga akan muncul di sini setelah pemilik kebun mempublikasikan hasil panennya.</p>
+        <!-- Total Product Counter -->
+        <div class="text-xs font-semibold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-lg self-start md:self-auto">
+          Menampilkan <span class="text-orange-600 font-bold">{filteredProducts().length}</span> Produk
+        </div>
+      </div>
+
+      <!-- Horizontal Scrollable Location Filter Pills -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-2 pt-1">
+        {#each availableLocations as loc}
+          {@const isActive = loc === activeLocation}
+          {@const count = getLocationProductCount(loc)}
+          <button
+            onclick={() => activeLocation = loc}
+            class="px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200 flex items-center gap-2 cursor-pointer
+              {isActive
+                ? 'bg-orange-600 text-white shadow-md shadow-orange-500/20 ring-2 ring-orange-400/30'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900 border border-slate-200/60'}"
+          >
+            <i class="fa-solid {loc === 'Semua' ? 'fa-layer-group' : 'fa-location-dot text-orange-400'} text-xs"></i>
+            <span>{loc}</span>
+            <span class="px-1.5 py-0.5 rounded-full text-[10px] {isActive ? 'bg-orange-700 text-white' : 'bg-slate-200 text-slate-600'}">
+              {count}
+            </span>
+          </button>
+        {/each}
+      </div>
+    </div>
+
+    <!-- Product Cards Grid -->
+    {#if filteredProducts().length === 0}
+      <!-- Empty State -->
+      <div class="text-center py-16 bg-white rounded-2xl border border-dashed border-slate-300 my-6">
+        <div class="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">🔍</div>
+        <h3 class="text-base font-bold text-slate-800">Tidak ada produk ditemukan</h3>
+        <p class="text-slate-500 text-sm mt-1">Coba ubah kata kunci atau pilih lokasi kebun lain.</p>
+        <button
+          onclick={() => { activeLocation = 'Semua'; searchQuery = ''; }}
+          class="mt-4 px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+        >
+          Reset Filter
+        </button>
       </div>
     {:else}
-      <!-- ===== PRODUCT GRID (grouped by Kebun) ===== -->
-      {#if searchQuery.trim()}
-        <!-- Flat search results -->
-        <div class="mb-4">
-          <p class="text-sm text-gray-500">
-            Menampilkan <strong class="text-gray-800">{filteredProducts().length}</strong> produk untuk "<strong class="text-orange-600">{searchQuery}</strong>"
-          </p>
-        </div>
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {#each filteredProducts() as product (product.id)}
-            {@render ProductCard({ product })}
-          {/each}
-        </div>
-        {#if filteredProducts().length === 0}
-          <div class="text-center py-16">
-            <p class="text-gray-400 text-lg mb-1">Tidak ada hasil</p>
-            <p class="text-gray-400 text-sm">Coba kata kunci lain</p>
-          </div>
-        {/if}
-      {:else}
-        <!-- Grouped by Kebun -->
-        <div class="space-y-10">
-          {#each storefrontData as kebun (kebun.id)}
-            <section>
-              <!-- Kebun Header -->
-              <div class="flex items-center gap-3 mb-4 pb-3 border-b border-gray-200">
-                <div class="h-9 w-9 rounded-xl bg-green-600 flex items-center justify-center flex-shrink-0 shadow-sm">
-                  <svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 001 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {#each filteredProducts() as product (product.id)}
+          <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden group hover:-translate-y-1">
+
+            <!-- Card Top Image (Clickable for Lightbox) -->
+            <div
+              onclick={() => openImageViewer(product)}
+              class="relative h-48 w-full overflow-hidden bg-slate-100 cursor-pointer group/img"
+            >
+              {#if product.imageUrl}
+                <img
+                  src={product.imageUrl}
+                  alt={product.name}
+                  class="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-500"
+                  loading="lazy"
+                  onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                />
+              {:else}
+                <div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-amber-50 to-orange-50">
+                  <span class="text-5xl group-hover/img:scale-110 transition-transform">🥭</span>
                 </div>
-                <div>
-                  <h2 class="text-base font-extrabold text-gray-900">{kebun.name}</h2>
-                  {#if kebun.location}<p class="text-xs text-gray-400">📍 {kebun.location}</p>{/if}
-                </div>
-                <span class="ml-auto text-xs font-medium text-gray-400">
-                  {kebun.devices.reduce((s,d)=>s+d.products.length,0)} produk
-                </span>
+              {/if}
+
+              <!-- Hover Overlay Hint -->
+              <div class="absolute inset-0 bg-slate-900/40 opacity-0 group-hover/img:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-2 text-white font-semibold text-xs backdrop-blur-xs">
+                <span class="w-8 h-8 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center text-sm">🔍</span>
+                <span>Lihat Foto Kebun & Buah</span>
               </div>
 
-              <!-- Per device section -->
-              {#each kebun.devices.filter(d => d.products.length > 0 || getSensorAvg(d).hasData) as device (device.id)}
-                {@const sensor = getSensorAvg(device)}
-                <div class="mb-6">
-                  <!-- Device sensor strip -->
-                  <div class="flex items-center gap-2 mb-3 flex-wrap">
-                    <div class="flex items-center gap-1.5">
-                      <span class="h-2 w-2 rounded-full {recentlyUpdatedDeviceIds.has(device.id) ? 'bg-green-500 animate-ping' : 'bg-green-400'} flex-shrink-0"></span>
-                      <span class="text-xs font-semibold text-gray-600">{device.name}</span>
-                    </div>
-                    {#if sensor.hasData}
-                      {@const ml = moistureLabel(sensor.moisture)}
-                      {@const pl = phLabel(sensor.ph)}
-                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium {ml.cls}">
-                        💧 {sensor.moisture.toFixed(0)}% · {ml.label}
-                      </span>
-                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium {pl.cls}">
-                        ⚗️ pH {sensor.ph.toFixed(1)} · {pl.label}
-                      </span>
-                      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-600">
-                        🧪 TDS {sensor.tds.toFixed(0)} ppm
-                      </span>
-                    {:else}
-                      <span class="text-xs text-gray-400 italic">Belum ada data sensor</span>
-                    {/if}
-                  </div>
+              <!-- Location Pill Badge on Top Right -->
+              <div class="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-md text-white text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-md">
+                <i class="fa-solid fa-location-dot text-orange-400 text-[11px]"></i>
+                <span>{product.kebunLocation}</span>
+              </div>
 
-                  <!-- Product grid for this device -->
-                  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {#each device.products as product (product.id)}
-                      {@const enriched = { ...product, kebunName: kebun.name, kebunId: kebun.id, kebunLocation: kebun.location, deviceName: device.name, deviceId: device.id, sensorAvg: sensor }}
-                      {@render ProductCard({ product: enriched })}
-                    {/each}
+              <!-- Farm Name Tag on Top Left -->
+              <div class="absolute top-3 left-3 bg-white/90 backdrop-blur-md text-slate-800 text-[11px] font-bold px-2 py-0.5 rounded-md flex items-center gap-1.5 shadow-sm border border-slate-200">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span>
+                <span>{product.kebunName}</span>
+              </div>
+            </div>
+
+            <!-- Card Body -->
+            <div class="p-4 sm:p-5 flex-1 flex flex-col justify-between">
+              <div>
+                <!-- Product Title & Variety -->
+                <h3 class="text-base font-extrabold text-slate-900 group-hover:text-orange-600 transition-colors line-clamp-1">
+                  {product.name}
+                </h3>
+                <p class="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                  {product.description ?? product.deviceName}
+                </p>
+
+                <!-- Price and Stock Details -->
+                <div class="mt-3 flex items-baseline justify-between">
+                  <div>
+                    <span class="text-lg font-black text-orange-600">{formatPrice(product.price)}</span>
+                    <span class="text-xs text-slate-400 font-normal">/{product.unit}</span>
+                  </div>
+                  <div class="text-right text-xs">
+                    <span class="text-slate-500 font-medium">Stok: <strong class="text-slate-700">{product.stock} {product.unit}</strong></span>
                   </div>
                 </div>
-              {/each}
-            </section>
-          {/each}
-        </div>
-      {/if}
-    {/if}
-  </div>
+              </div>
 
-  <!-- ===== FOOTER ===== -->
-  <footer class="mt-16 bg-gray-900 text-gray-400">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div class="flex items-center gap-2">
-          <span class="text-2xl">🥭</span>
-          <span class="font-extrabold text-white text-lg">MangoFresh</span>
+              <!-- BUTTON TO OPEN SENSOR HISTORY & GRAPH MODAL -->
+              <button
+                onclick={() => openSensorModal(product)}
+                class="w-full bg-orange-50 hover:bg-orange-100 active:bg-orange-200 text-orange-700 font-bold text-[11px] py-1.5 px-3 mt-4 rounded-lg border border-orange-200/80 transition-all flex items-center justify-center gap-1.5 group/sensorBtn cursor-pointer"
+              >
+                <i class="fa-solid fa-chart-line text-orange-600 group-hover/sensorBtn:scale-110 transition-transform"></i>
+                <span>Lihat Riwayat & Grafik Sensor</span>
+              </button>
+
+              <!-- Card Bottom Action Section -->
+              <div class="mt-4 pt-3 border-t border-slate-100 flex flex-col gap-2">
+                <div class="flex items-center justify-between text-[11px] text-slate-400">
+                  <span>
+                    <i class="fa-regular fa-calendar-check mr-1"></i>
+                    Panen: {product.harvestDate ? new Date(product.harvestDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Segar Hari Ini'}
+                  </span>
+                  <span class="text-emerald-600 font-medium">Tersedia</span>
+                </div>
+
+                <!-- ORDER VIA WHATSAPP BUTTON -->
+                <button
+                  onclick={() => orderViaWA(product)}
+                  class="w-full mt-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-sm py-2.5 px-4 rounded-xl shadow-md hover:shadow-lg hover:shadow-emerald-600/20 transition-all duration-200 flex items-center justify-center gap-2 group/btn cursor-pointer"
+                >
+                  <i class="fa-brands fa-whatsapp text-lg group-hover/btn:scale-110 transition-transform"></i>
+                  <span>Pesan Sekarang via WA</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </main>
+
+  <!-- IMAGE VIEWER MODAL / LIGHTBOX -->
+  {#if isImageViewerOpen && activeImageProduct}
+    <div class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 transition-all duration-300">
+      <!-- Top Bar -->
+      <div class="flex items-center justify-between text-white max-w-6xl w-full mx-auto">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-400 border border-orange-500/30 flex items-center justify-center text-lg">
+            🥭
+          </div>
+          <div>
+            <h4 class="font-bold text-base sm:text-lg text-slate-100 leading-none">{activeImageProduct.name}</h4>
+            <p class="text-xs text-slate-400 mt-1">
+              <span class="text-orange-400 font-medium">📍 {activeImageProduct.kebunLocation}</span> · {activeImageProduct.kebunName}
+            </p>
+          </div>
         </div>
-        <p class="text-xs text-gray-500">Platform e-commerce mangga berbasis IoT. Kualitas tanah terverifikasi sensor realtime.</p>
+        <button
+          onclick={closeImageViewer}
+          class="w-10 h-10 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700 transition-all cursor-pointer"
+        >
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
       </div>
-      <div class="mt-6 pt-4 border-t border-gray-800 text-center text-xs text-gray-600">
-        © 2026 MangoFresh · IoT Mangga Monitoring System
+
+      <!-- Main Image Display -->
+      <div class="relative flex-1 flex items-center justify-center my-4 max-w-6xl w-full mx-auto overflow-hidden">
+        <div class="relative max-h-full max-w-full flex flex-col items-center justify-center">
+          {#if activeImageProduct.imageUrl}
+            <img
+              src={activeImageProduct.imageUrl}
+              alt={activeImageProduct.name}
+              class="max-h-[60vh] sm:max-h-[68vh] w-auto object-contain rounded-2xl shadow-2xl border border-slate-800"
+            />
+          {:else}
+            <div class="w-64 h-64 bg-slate-900 rounded-2xl flex items-center justify-center text-7xl">🥭</div>
+          {/if}
+          <div class="mt-3 bg-slate-900/90 border border-slate-800 text-slate-200 text-xs sm:text-sm px-4 py-2.5 rounded-xl max-w-xl text-center backdrop-blur-md shadow-lg">
+            <span class="bg-orange-500/20 text-orange-300 text-[11px] font-bold px-2 py-0.5 rounded-md mr-2 inline-block">Foto Produk</span>
+            <span class="text-slate-300 font-medium">{activeImageProduct.name} — {activeImageProduct.kebunName} ({activeImageProduct.kebunLocation})</span>
+          </div>
+        </div>
       </div>
+
+      <!-- Bottom Bar -->
+      <div class="max-w-4xl w-full mx-auto bg-slate-900/90 rounded-2xl p-3 border border-slate-800 text-center">
+        <button
+          onclick={() => orderViaWA(activeImageProduct)}
+          class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer inline-flex items-center gap-2"
+        >
+          <i class="fa-brands fa-whatsapp text-lg"></i>
+          <span>Pesan Buah Ini via WhatsApp ({activeImageProduct.waNumber})</span>
+        </button>
+      </div>
+    </div>
+  {/if}
+
+  <!-- SENSOR HISTORY & GRAPH MODAL -->
+  {#if isSensorModalOpen && activeSensorProduct}
+    <div class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 transition-all duration-300">
+      <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
+        
+        <!-- Modal Header -->
+        <div class="bg-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-slate-800">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-orange-500/20 text-orange-400 border border-orange-500/30 flex items-center justify-center text-lg">
+              <i class="fa-solid fa-chart-line"></i>
+            </div>
+            <div>
+              <h3 class="font-extrabold text-base sm:text-lg text-white">Riwayat Sensor Kebun</h3>
+              <p class="text-xs text-slate-400">{activeSensorProduct.kebunName} ({activeSensorProduct.kebunLocation}) · {activeSensorProduct.deviceName}</p>
+            </div>
+          </div>
+          <button
+            onclick={closeSensorModal}
+            class="w-9 h-9 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700 transition-colors cursor-pointer"
+          >
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- Modal Content Body -->
+        <div class="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
+          
+          <!-- Live Current Metrics Summary Cards -->
+          <div class="grid grid-cols-3 gap-3">
+            <div class="bg-blue-50/70 border border-blue-100 rounded-xl p-3 text-center">
+              <div class="text-[11px] font-semibold text-blue-600 mb-0.5">💧 Kelembapan</div>
+              <div class="text-lg sm:text-xl font-black text-blue-900">{activeSensorProduct.sensorAvg.moisture.toFixed(0)}%</div>
+              <div class="text-[10px] text-blue-500 mt-0.5">Sensor Tanah</div>
+            </div>
+            <div class="bg-emerald-50/70 border border-emerald-100 rounded-xl p-3 text-center">
+              <div class="text-[11px] font-semibold text-emerald-600 mb-0.5">🌾 pH Tanah</div>
+              <div class="text-lg sm:text-xl font-black text-emerald-900">{activeSensorProduct.sensorAvg.ph.toFixed(1)}</div>
+              <div class="text-[10px] text-emerald-500 mt-0.5">Tingkat Keasaman</div>
+            </div>
+            <div class="bg-purple-50/70 border border-purple-100 rounded-xl p-3 text-center">
+              <div class="text-[11px] font-semibold text-purple-600 mb-0.5">🧪 TDS Nutrisi</div>
+              <div class="text-lg sm:text-xl font-black text-purple-900">{activeSensorProduct.sensorAvg.tds.toFixed(0)} ppm</div>
+              <div class="text-[10px] text-purple-500 mt-0.5">Kandungan Mineral</div>
+            </div>
+          </div>
+
+          <!-- Tab Selector for Chart Type -->
+          <div class="flex items-center justify-between border-b border-slate-200 pb-3">
+            <span class="text-xs font-bold text-slate-700">Grafik Telemetri:</span>
+            <div class="flex items-center gap-1.5 text-xs">
+              <button
+                onclick={() => switchChartMetric('moisture')}
+                class="px-3 py-1 rounded-lg font-bold transition-all cursor-pointer {activeChartMetric === 'moisture' ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+              >💧 Kelembapan</button>
+              <button
+                onclick={() => switchChartMetric('ph')}
+                class="px-3 py-1 rounded-lg font-bold transition-all cursor-pointer {activeChartMetric === 'ph' ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+              >🌾 pH</button>
+              <button
+                onclick={() => switchChartMetric('tds')}
+                class="px-3 py-1 rounded-lg font-bold transition-all cursor-pointer {activeChartMetric === 'tds' ? 'bg-purple-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}"
+              >🧪 TDS</button>
+            </div>
+          </div>
+
+          <!-- Canvas Chart Area -->
+          <div class="bg-slate-900 rounded-xl p-4 shadow-inner relative">
+            <div class="flex items-center justify-between text-xs text-slate-400 mb-3">
+              <span class="font-semibold text-slate-200">
+                {activeChartMetric === 'moisture' ? 'Tren Kelembapan Tanah (%)' : activeChartMetric === 'ph' ? 'Tren pH Tanah' : 'Tren Nutrisi / TDS (ppm)'}
+              </span>
+              <span class="text-[11px] text-emerald-400 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Dynamic IoT Node
+              </span>
+            </div>
+            <div class="h-48 w-full relative">
+              <canvas bind:this={canvasElement} class="w-full h-full block"></canvas>
+            </div>
+          </div>
+
+          <!-- Historical Summary note -->
+          <div class="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-3 text-xs text-amber-900">
+            <i class="fa-solid fa-circle-info text-amber-600 text-base shrink-0 mt-0.5"></i>
+            <div>
+              <span class="font-bold">Informasi Telemetri Kebun:</span> Data diambil dari sensor perakaran secara otomatis. Riwayat ini mencerminkan stabilitas nutrisi dan kadar air tanah tempat buah tumbuh.
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="bg-slate-50 border-t border-slate-100 p-3 sm:px-6 flex justify-between items-center">
+          <button
+            onclick={() => orderViaWA(activeSensorProduct)}
+            class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <i class="fa-brands fa-whatsapp text-sm"></i>
+            <span>Pesan via WA</span>
+          </button>
+          <button
+            onclick={closeSensorModal}
+            class="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+          >
+            Tutup Riwayat
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- TOAST NOTIFICATION -->
+  {#if showToastState}
+    <div class="fixed bottom-5 right-5 z-50 transition-all duration-300">
+      <div class="bg-slate-900 text-white px-4 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-slate-700">
+        <div class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+          <i class="fa-solid fa-check"></i>
+        </div>
+        <div>
+          <p class="text-sm font-medium">{toastMessage}</p>
+          <p class="text-xs text-slate-400">Mengarahkan ke WhatsApp...</p>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- FOOTER -->
+  <footer class="bg-slate-900 text-slate-400 mt-16 border-t border-slate-800">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-2">
+        <div class="w-7 h-7 rounded-lg bg-orange-500 flex items-center justify-center text-white text-xs">🥭</div>
+        <span class="text-white font-bold tracking-tight text-lg">MangoFresh</span>
+      </div>
+      <p class="text-xs text-slate-400 text-center sm:text-right">
+        Platform e-commerce mangga berbasis IoT. Data sensor terverifikasi realtime.
+      </p>
+    </div>
+    <div class="bg-slate-950 py-4 px-4 text-center text-xs text-slate-500 border-t border-slate-800/80">
+      © 2026 MangoFresh · IoT Mangga Monitoring System. All rights reserved.
     </div>
   </footer>
+
 </div>
-
-<!-- ===== PRODUCT CARD ===== -->
-{#snippet ProductCard(props: { product: any })}
-  {@const p = props.product}
-  <article class="group bg-white rounded-2xl overflow-hidden border border-gray-100 hover:border-orange-200 hover:shadow-md transition-all duration-200 flex flex-col">
-
-    <!-- Gambar produk -->
-    <div class="overflow-hidden bg-gradient-to-br from-amber-50 to-orange-50" style="aspect-ratio:4/3">
-      {#if p.imageUrl}
-        <img
-          src={p.imageUrl}
-          alt={p.name}
-          class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          onerror={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-        />
-      {:else}
-        <div class="w-full h-full flex items-center justify-center">
-          <span class="text-5xl group-hover:scale-110 transition-transform duration-200">🥭</span>
-        </div>
-      {/if}
-    </div>
-
-    <!-- Info produk -->
-    <div class="p-3 flex flex-col flex-1 gap-1">
-      <h3 class="font-bold text-gray-900 text-sm leading-snug line-clamp-2">{p.name}</h3>
-
-      {#if p.description}
-        <p class="text-xs text-gray-400 line-clamp-2 leading-relaxed">{p.description}</p>
-      {/if}
-
-      <div class="mt-auto pt-2 border-t border-gray-50">
-        <p class="text-base font-extrabold text-orange-500 leading-none">
-          {formatPrice(p.price)}<span class="text-xs font-normal text-gray-400">/{p.unit}</span>
-        </p>
-        <div class="mt-1.5 flex items-center justify-between text-xs">
-          <span class="font-medium {p.stock <= 10 ? 'text-red-500' : 'text-gray-500'}">
-            Stok: {p.stock} {p.unit}
-          </span>
-          {#if p.harvestDate}
-            <span class="text-gray-400">
-              🌾 {new Date(p.harvestDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-            </span>
-          {/if}
-        </div>
-      </div>
-    </div>
-  </article>
-{/snippet}

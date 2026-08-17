@@ -11,15 +11,18 @@
   // Form state untuk create
   let createName = $state('');
   let createLocation = $state('');
+  let createWaNumber = $state('');
 
   // Form state untuk edit
   let editName = $state('');
   let editLocation = $state('');
+  let editWaNumber = $state('');
 
-  function startEdit(kebun: { id: string; name: string; location: string | null }) {
+  function startEdit(kebun: { id: string; name: string; location: string | null; waNumber?: string | null }) {
     editingKebunId = kebun.id;
     editName = kebun.name;
     editLocation = kebun.location ?? '';
+    editWaNumber = kebun.waNumber ?? '';
   }
 
   function cancelEdit() {
@@ -40,7 +43,7 @@
     <div>
       <h1 class="text-3xl font-bold text-gray-900">Manajemen Kebun</h1>
       <p class="text-sm text-gray-500 mt-1">
-        Kelola kebun (lokasi) dan hubungkan perangkat IoT ke masing-masing kebun.
+        Kelola kebun (lokasi), nomor WhatsApp kontak, dan hubungkan perangkat IoT.
       </p>
     </div>
     <button
@@ -67,13 +70,14 @@
               showCreateForm = false;
               createName = '';
               createLocation = '';
+              createWaNumber = '';
             }
             update();
           };
         }}
         class="space-y-4"
       >
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label for="create-name" class="block text-sm font-medium text-gray-700 mb-1"
               >Nama Kebun <span class="text-red-500">*</span></label
@@ -85,20 +89,33 @@
               maxlength="100"
               required
               bind:value={createName}
-              placeholder="Contoh: Kebun Utara"
+              placeholder="Contoh: Kebun Sidamukti 1"
               class="block w-full border-gray-300 rounded-xl shadow-sm focus:ring-amber-500 focus:border-amber-500 sm:text-sm"
             />
           </div>
           <div>
             <label for="create-location" class="block text-sm font-medium text-gray-700 mb-1"
-              >Lokasi (opsional)</label
+              >Lokasi Kebun</label
             >
             <input
               id="create-location"
               name="location"
               type="text"
               bind:value={createLocation}
-              placeholder="Contoh: Desa Sukamaju, Jawa Barat"
+              placeholder="Contoh: Sidamukti"
+              class="block w-full border-gray-300 rounded-xl shadow-sm focus:ring-amber-500 focus:border-amber-500 sm:text-sm"
+            />
+          </div>
+          <div>
+            <label for="create-wa" class="block text-sm font-medium text-gray-700 mb-1"
+              >Nomor WhatsApp</label
+            >
+            <input
+              id="create-wa"
+              name="waNumber"
+              type="text"
+              bind:value={createWaNumber}
+              placeholder="Contoh: 6281234567890"
               class="block w-full border-gray-300 rounded-xl shadow-sm focus:ring-amber-500 focus:border-amber-500 sm:text-sm"
             />
           </div>
@@ -163,7 +180,7 @@
                 class="space-y-4"
               >
                 <input type="hidden" name="id" value={kebun.id} />
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <div>
                     <label for="edit-name-{kebun.id}" class="block text-sm font-medium text-gray-700 mb-1"
                       >Nama Kebun <span class="text-red-500">*</span></label
@@ -187,6 +204,19 @@
                       name="location"
                       type="text"
                       bind:value={editLocation}
+                      class="block w-full border-gray-300 rounded-xl shadow-sm focus:ring-amber-500 focus:border-amber-500 sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label for="edit-wa-{kebun.id}" class="block text-sm font-medium text-gray-700 mb-1"
+                      >Nomor WhatsApp</label
+                    >
+                    <input
+                      id="edit-wa-{kebun.id}"
+                      name="waNumber"
+                      type="text"
+                      bind:value={editWaNumber}
+                      placeholder="6281234567890"
                       class="block w-full border-gray-300 rounded-xl shadow-sm focus:ring-amber-500 focus:border-amber-500 sm:text-sm"
                     />
                   </div>
@@ -227,10 +257,15 @@
                     </svg>
                     <h2 class="text-xl font-bold text-gray-900">{kebun.name}</h2>
                   </div>
-                  {#if kebun.location}
-                    <p class="text-sm text-gray-500 ml-7">📍 {kebun.location}</p>
-                  {/if}
-                  <p class="text-xs text-gray-400 ml-7 mt-1">
+                  <div class="ml-7 space-y-0.5">
+                    {#if kebun.location}
+                      <p class="text-sm text-gray-500">📍 Lokasi: <strong class="text-gray-700 font-semibold">{kebun.location}</strong></p>
+                    {/if}
+                    <p class="text-sm text-gray-500">
+                      📱 WhatsApp: <strong class="text-emerald-600 font-semibold">{kebun.waNumber || 'Belum diisi'}</strong>
+                    </p>
+                  </div>
+                  <p class="text-xs text-gray-400 ml-7 mt-2">
                     {kebun.devices.length} perangkat terhubung
                   </p>
                 </div>

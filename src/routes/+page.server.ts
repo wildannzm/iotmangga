@@ -19,12 +19,13 @@ export const load: PageServerLoad = async () => {
       id: true,
       name: true,
       location: true,
+      waNumber: true,
       devices: {
         orderBy: { createdAt: 'asc' },
         select: {
           id: true,
           name: true,
-          // 20 latest sensor readings for average calculation
+          // 20 latest sensor readings for average calculation & telemetry graph
           sensorData: {
             orderBy: { createdAt: 'desc' },
             take: 20,
@@ -54,11 +55,12 @@ export const load: PageServerLoad = async () => {
     }
   });
 
-  // Pre-compute sensor averages server-side for each device
+  // Pre-compute sensor averages & history server-side for each device
   const storefrontData = kebuns.map((kebun) => ({
     id: kebun.id,
     name: kebun.name,
-    location: kebun.location,
+    location: kebun.location ?? 'Sidamukti',
+    waNumber: kebun.waNumber ?? '6281234567890',
     devices: kebun.devices.map((device) => {
       const count = device.sensorData.length;
       const sensorAvg =
@@ -71,10 +73,20 @@ export const load: PageServerLoad = async () => {
             }
           : { moisture: 0, ph: 0, tds: 0, hasData: false };
 
+      // Chronological history (oldest to newest) for line charts
+      const historyRaw = [...device.sensorData].reverse();
+      const history = {
+        dates: historyRaw.map(s => new Date(s.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' })),
+        moisture: historyRaw.map(s => Math.round(s.moisture)),
+        ph: historyRaw.map(s => Number(s.ph.toFixed(1))),
+        tds: historyRaw.map(s => Math.round(s.tds))
+      };
+
       return {
         id: device.id,
         name: device.name,
         sensorAvg,
+        history,
         products: device.products
       };
     })

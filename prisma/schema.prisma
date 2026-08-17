@@ -35,6 +35,7 @@ model Kebun {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   location  String?
+  waNumber  String?  @default("6281234567890")
   createdAt DateTime @default(now())
 
   devices   Device[]

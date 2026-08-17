@@ -33,6 +33,7 @@ export const actions: Actions = {
     const data = await request.formData();
     const name = data.get('name')?.toString().trim() ?? '';
     const location = data.get('location')?.toString().trim() ?? '';
+    const waNumber = data.get('waNumber')?.toString().trim() ?? '';
 
     if (!name) return fail(400, { error: 'Nama kebun wajib diisi.' });
     if (name.length > 100) return fail(400, { error: 'Nama kebun maksimal 100 karakter.' });
@@ -42,6 +43,7 @@ export const actions: Actions = {
         data: {
           name,
           location: location || null,
+          waNumber: waNumber || null,
           userId: locals.user.id
         }
       });
@@ -58,6 +60,7 @@ export const actions: Actions = {
     const id = data.get('id')?.toString() ?? '';
     const name = data.get('name')?.toString().trim() ?? '';
     const location = data.get('location')?.toString().trim() ?? '';
+    const waNumber = data.get('waNumber')?.toString().trim() ?? '';
 
     if (!id) return fail(400, { error: 'ID kebun tidak valid.' });
     if (!name) return fail(400, { error: 'Nama kebun wajib diisi.' });
@@ -71,7 +74,11 @@ export const actions: Actions = {
     try {
       await prisma.kebun.update({
         where: { id },
-        data: { name, location: location || null }
+        data: {
+          name,
+          location: location || null,
+          waNumber: waNumber || null
+        }
       });
       return { success: true };
     } catch {
