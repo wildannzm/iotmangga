@@ -76,7 +76,14 @@ export const load: PageServerLoad = async () => {
       // Chronological history (oldest to newest) for line charts
       const historyRaw = [...device.sensorData].reverse();
       const history = {
-        dates: historyRaw.map(s => new Date(s.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit' })),
+        dates: historyRaw.map(s => {
+          const d = new Date(s.createdAt);
+          const day = String(d.getDate()).padStart(2, '0');
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const hours = String(d.getHours()).padStart(2, '0');
+          const mins = String(d.getMinutes()).padStart(2, '0');
+          return `${day}/${month} ${hours}:${mins}`;
+        }),
         moisture: historyRaw.map(s => Math.round(s.moisture)),
         ph: historyRaw.map(s => Number(s.ph.toFixed(1))),
         tds: historyRaw.map(s => Math.round(s.tds))

@@ -255,21 +255,32 @@
     ctx.stroke();
 
     // Points and X Axis Labels
-    points.forEach(p => {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-      ctx.fillText(p.date, p.x - (12 * dpr), height - (10 * dpr));
+    const totalPoints = points.length;
+    const labelStep = Math.max(1, Math.floor(totalPoints / 5));
 
+    points.forEach((p, idx) => {
+      // Draw X Axis date-time text at clean intervals to avoid text overlap
+      if (idx === 0 || idx === totalPoints - 1 || idx % labelStep === 0) {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = `${9 * dpr}px Inter, sans-serif`;
+        ctx.fillText(p.date, Math.max(paddingLeft - (15 * dpr), Math.min(p.x - (20 * dpr), width - paddingRight - (40 * dpr))), height - (8 * dpr));
+      }
+
+      // Circle point
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 5 * dpr, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, 4.5 * dpr, 0, Math.PI * 2);
       ctx.fillStyle = '#0f172a';
       ctx.fill();
       ctx.strokeStyle = activeChartMetric === 'moisture' ? '#3b82f6' : activeChartMetric === 'ph' ? '#10b981' : '#a855f7';
       ctx.lineWidth = 2 * dpr;
       ctx.stroke();
 
-      ctx.fillStyle = '#ffffff';
-      ctx.font = `bold ${9 * dpr}px Inter, sans-serif`;
-      ctx.fillText(String(p.val), p.x - (8 * dpr), p.y - (8 * dpr));
+      // Point Value Tag
+      if (totalPoints <= 10 || idx % 2 === 0 || idx === totalPoints - 1) {
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${8.5 * dpr}px Inter, sans-serif`;
+        ctx.fillText(String(p.val), p.x - (7 * dpr), p.y - (7 * dpr));
+      }
     });
   }
 
@@ -540,55 +551,56 @@
 
   <!-- IMAGE VIEWER MODAL / LIGHTBOX -->
   {#if isImageViewerOpen && activeImageProduct}
-    <div class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col justify-between p-4 sm:p-6 transition-all duration-300">
+    <div
+      onclick={(e) => { if (e.target === e.currentTarget) closeImageViewer(); }}
+      class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex flex-col justify-between p-3 sm:p-5 overflow-y-auto max-h-screen transition-all duration-300 select-none"
+    >
       <!-- Top Bar -->
-      <div class="flex items-center justify-between text-white max-w-6xl w-full mx-auto">
-        <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-400 border border-orange-500/30 flex items-center justify-center text-lg">
+      <div class="flex items-center justify-between text-white max-w-5xl w-full mx-auto shrink-0 mb-2">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-orange-500/20 text-orange-400 border border-orange-500/30 flex items-center justify-center text-base sm:text-lg">
             🥭
           </div>
           <div>
-            <h4 class="font-bold text-base sm:text-lg text-slate-100 leading-none">{activeImageProduct.name}</h4>
-            <p class="text-xs text-slate-400 mt-1">
+            <h4 class="font-bold text-sm sm:text-base text-slate-100 leading-tight line-clamp-1">{activeImageProduct.name}</h4>
+            <p class="text-[11px] sm:text-xs text-slate-400">
               <span class="text-orange-400 font-medium">📍 {activeImageProduct.kebunLocation}</span> · {activeImageProduct.kebunName}
             </p>
           </div>
         </div>
         <button
           onclick={closeImageViewer}
-          class="w-10 h-10 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700 transition-all cursor-pointer"
+          class="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center border border-slate-700 transition-all cursor-pointer shrink-0"
         >
-          <i class="fa-solid fa-xmark text-lg"></i>
+          <i class="fa-solid fa-xmark text-base sm:text-lg"></i>
         </button>
       </div>
 
       <!-- Main Image Display -->
-      <div class="relative flex-1 flex items-center justify-center my-4 max-w-6xl w-full mx-auto overflow-hidden">
-        <div class="relative max-h-full max-w-full flex flex-col items-center justify-center">
-          {#if activeImageProduct.imageUrl}
-            <img
-              src={activeImageProduct.imageUrl}
-              alt={activeImageProduct.name}
-              class="max-h-[60vh] sm:max-h-[68vh] w-auto object-contain rounded-2xl shadow-2xl border border-slate-800"
-            />
-          {:else}
-            <div class="w-64 h-64 bg-slate-900 rounded-2xl flex items-center justify-center text-7xl">🥭</div>
-          {/if}
-          <div class="mt-3 bg-slate-900/90 border border-slate-800 text-slate-200 text-xs sm:text-sm px-4 py-2.5 rounded-xl max-w-xl text-center backdrop-blur-md shadow-lg">
-            <span class="bg-orange-500/20 text-orange-300 text-[11px] font-bold px-2 py-0.5 rounded-md mr-2 inline-block">Foto Produk</span>
-            <span class="text-slate-300 font-medium">{activeImageProduct.name} — {activeImageProduct.kebunName} ({activeImageProduct.kebunLocation})</span>
-          </div>
+      <div class="flex-1 min-h-0 flex flex-col items-center justify-center my-2 max-w-5xl w-full mx-auto overflow-hidden">
+        {#if activeImageProduct.imageUrl}
+          <img
+            src={activeImageProduct.imageUrl}
+            alt={activeImageProduct.name}
+            class="max-h-[48vh] sm:max-h-[55vh] md:max-h-[58vh] w-auto max-w-full object-contain rounded-2xl shadow-2xl border border-slate-800 shrink"
+          />
+        {:else}
+          <div class="w-48 h-48 sm:w-64 sm:h-64 bg-slate-900 rounded-2xl flex items-center justify-center text-6xl sm:text-7xl">🥭</div>
+        {/if}
+        <div class="mt-2.5 bg-slate-900/90 border border-slate-800 text-slate-200 text-xs px-3.5 py-2 rounded-xl max-w-md text-center backdrop-blur-md shadow-lg shrink-0">
+          <span class="bg-orange-500/20 text-orange-300 text-[10px] font-bold px-2 py-0.5 rounded-md mr-1.5 inline-block">Foto Produk</span>
+          <span class="text-slate-300 font-medium">{activeImageProduct.name} — {activeImageProduct.kebunName} ({activeImageProduct.kebunLocation})</span>
         </div>
       </div>
 
       <!-- Bottom Bar -->
-      <div class="max-w-4xl w-full mx-auto bg-slate-900/90 rounded-2xl p-3 border border-slate-800 text-center">
+      <div class="max-w-3xl w-full mx-auto bg-slate-900/90 rounded-2xl p-2.5 border border-slate-800 text-center shrink-0 mt-2">
         <button
           onclick={() => orderViaWA(activeImageProduct)}
-          class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-colors cursor-pointer inline-flex items-center gap-2"
+          class="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer inline-flex items-center justify-center gap-2 shadow-md hover:shadow-emerald-600/20"
         >
-          <i class="fa-brands fa-whatsapp text-lg"></i>
-          <span>Pesan Buah Ini via WhatsApp ({activeImageProduct.waNumber})</span>
+          <i class="fa-brands fa-whatsapp text-base sm:text-lg"></i>
+          <span>Pesan Buah Ini via WhatsApp</span>
         </button>
       </div>
     </div>
