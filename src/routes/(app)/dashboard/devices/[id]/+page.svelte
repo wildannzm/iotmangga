@@ -18,7 +18,14 @@
   let latestData = $derived(historicalData.length > 0 ? historicalData[historicalData.length - 1] : null);
 
   // Reactive chart data
-  let chartLabels = $derived(historicalData.map(d => new Date(d.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })));
+  let chartLabels = $derived(historicalData.map(d => {
+    const dt = new Date(d.createdAt);
+    const day = String(dt.getDate()).padStart(2, '0');
+    const month = String(dt.getMonth() + 1).padStart(2, '0');
+    const hours = String(dt.getHours()).padStart(2, '0');
+    const mins = String(dt.getMinutes()).padStart(2, '0');
+    return `${day}/${month} ${hours}:${mins}`;
+  }));
 
   let isRefreshing = $state(false);
   async function handleRefresh() {
@@ -69,9 +76,23 @@
     plugins: { legend: { display: false } }
   };
 
-  const chartOptionsMoisture: ChartOptions<'line'> = { ...baseChartOptions, scales: { y: { type: 'linear', display: true, title: { display: true, text: 'Kelembapan (%)' }, min: 0, max: 100 } } };
-  const chartOptionsPh: ChartOptions<'line'> = { ...baseChartOptions, scales: { y: { type: 'linear', display: true, title: { display: true, text: 'pH Tanah' }, min: 0, max: 14 } } };
-  const chartOptionsTds: ChartOptions<'line'> = { ...baseChartOptions, scales: { y: { type: 'linear', display: true, title: { display: true, text: 'TDS (ppm)' }, min: 0 } } };
+  const baseScalesX = {
+    ticks: {
+      autoSkip: true,
+      maxTicksLimit: 4,
+      maxRotation: 0,
+      minRotation: 0,
+      font: { size: 9 },
+      padding: 6
+    },
+    grid: {
+      display: false
+    }
+  };
+
+  const chartOptionsMoisture: ChartOptions<'line'> = { ...baseChartOptions, scales: { x: baseScalesX, y: { type: 'linear', display: true, title: { display: true, text: 'Kelembapan (%)' }, min: 0, max: 100 } } };
+  const chartOptionsPh: ChartOptions<'line'> = { ...baseChartOptions, scales: { x: baseScalesX, y: { type: 'linear', display: true, title: { display: true, text: 'pH Tanah' }, min: 0, max: 14 } } };
+  const chartOptionsTds: ChartOptions<'line'> = { ...baseChartOptions, scales: { x: baseScalesX, y: { type: 'linear', display: true, title: { display: true, text: 'TDS (ppm)' }, min: 0 } } };
 
   // Real-time WebSocket connection
   let channel: any;

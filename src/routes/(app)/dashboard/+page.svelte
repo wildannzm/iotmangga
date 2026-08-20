@@ -83,7 +83,14 @@
     if (!bestDevice || maxLen === 0) {
       return [];
     }
-    return bestDevice.sensorData.map(d => new Date(d.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })).reverse();
+    return bestDevice.sensorData.map(d => {
+      const dt = new Date(d.createdAt);
+      const day = String(dt.getDate()).padStart(2, '0');
+      const month = String(dt.getMonth() + 1).padStart(2, '0');
+      const hours = String(dt.getHours()).padStart(2, '0');
+      const mins = String(dt.getMinutes()).padStart(2, '0');
+      return `${day}/${month} ${hours}:${mins}`;
+    }).reverse();
   });
 
   let chartDataMoisture = $derived({
@@ -144,9 +151,23 @@
     plugins: { legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 12 } } }
   };
 
-  const chartOptionsMoisture: ChartOptions<'line'> = { ...baseChartOptions, scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: 'Kelembapan (%)' } } } };
-  const chartOptionsPh: ChartOptions<'line'> = { ...baseChartOptions, scales: { y: { beginAtZero: true, max: 14, title: { display: true, text: 'pH' } } } };
-  const chartOptionsTds: ChartOptions<'line'> = { ...baseChartOptions, scales: { y: { beginAtZero: true, title: { display: true, text: 'TDS (ppm)' } } } };
+  const baseScalesX = {
+    ticks: {
+      autoSkip: true,
+      maxTicksLimit: 4,
+      maxRotation: 0,
+      minRotation: 0,
+      font: { size: 9 },
+      padding: 6
+    },
+    grid: {
+      display: false
+    }
+  };
+
+  const chartOptionsMoisture: ChartOptions<'line'> = { ...baseChartOptions, scales: { x: baseScalesX, y: { beginAtZero: true, max: 100, title: { display: true, text: 'Kelembapan (%)' } } } };
+  const chartOptionsPh: ChartOptions<'line'> = { ...baseChartOptions, scales: { x: baseScalesX, y: { beginAtZero: true, max: 14, title: { display: true, text: 'pH' } } } };
+  const chartOptionsTds: ChartOptions<'line'> = { ...baseChartOptions, scales: { x: baseScalesX, y: { beginAtZero: true, title: { display: true, text: 'TDS (ppm)' } } } };
 
   // --- WebSockets ---
   let channel: any;

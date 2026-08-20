@@ -188,7 +188,7 @@
     const paddingLeft = 45 * dpr;
     const paddingRight = 20 * dpr;
     const paddingTop = 20 * dpr;
-    const paddingBottom = 35 * dpr;
+    const paddingBottom = 44 * dpr;
 
     const minVal = Math.min(...rawValues) * 0.85;
     const maxVal = Math.max(...rawValues) * 1.15 || 1;
@@ -256,16 +256,10 @@
 
     // Points and X Axis Labels
     const totalPoints = points.length;
-    const labelStep = Math.max(1, Math.floor(totalPoints / 5));
+    const minLabelGap = 50 * dpr;
+    let lastLabelX = -999;
 
     points.forEach((p, idx) => {
-      // Draw X Axis date-time text at clean intervals to avoid text overlap
-      if (idx === 0 || idx === totalPoints - 1 || idx % labelStep === 0) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.font = `${9 * dpr}px Inter, sans-serif`;
-        ctx.fillText(p.date, Math.max(paddingLeft - (15 * dpr), Math.min(p.x - (20 * dpr), width - paddingRight - (40 * dpr))), height - (8 * dpr));
-      }
-
       // Circle point
       ctx.beginPath();
       ctx.arc(p.x, p.y, 4.5 * dpr, 0, Math.PI * 2);
@@ -280,6 +274,25 @@
         ctx.fillStyle = '#ffffff';
         ctx.font = `bold ${8.5 * dpr}px Inter, sans-serif`;
         ctx.fillText(String(p.val), p.x - (7 * dpr), p.y - (7 * dpr));
+      }
+
+      // Smart X-Axis 2-line Label (Date on top, Time below) with collision prevention
+      const isFirst = idx === 0;
+      const isLast = idx === totalPoints - 1;
+      const hasEnoughSpace = (p.x - lastLabelX) >= minLabelGap;
+
+      if (isFirst || hasEnoughSpace || (isLast && (p.x - lastLabelX) >= 35 * dpr)) {
+        lastLabelX = p.x;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+        ctx.font = `${8.5 * dpr}px Inter, sans-serif`;
+
+        const parts = p.date.split(' ');
+        if (parts.length === 2) {
+          ctx.fillText(parts[0], p.x - (12 * dpr), height - (20 * dpr));
+          ctx.fillText(parts[1], p.x - (12 * dpr), height - (7 * dpr));
+        } else {
+          ctx.fillText(p.date, p.x - (14 * dpr), height - (10 * dpr));
+        }
       }
     });
   }
