@@ -137,6 +137,25 @@
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(price);
   }
 
+  function predictMangoQuality(ph: number, tds: number, moisture: number) {
+    const isPhIdeal = ph >= 5.5 && ph <= 7.5;
+    const isTdsIdeal = tds >= 90 && tds <= 150;
+    const isMoistureIdeal = moisture >= 60 && moisture <= 80;
+
+    let idealCount = 0;
+    if (isPhIdeal) idealCount++;
+    if (isTdsIdeal) idealCount++;
+    if (isMoistureIdeal) idealCount++;
+
+    if (idealCount === 3) {
+      return { status: "Terawat", confidence: 98, colorClass: "text-emerald-600" };
+    } else if (idealCount === 2) {
+      return { status: "Kurang Terawat", confidence: 85, colorClass: "text-amber-500" };
+    } else {
+      return { status: "Tidak Terawat", confidence: 70, colorClass: "text-rose-500" };
+    }
+  }
+
   // Sensor Telemetry Modal & Chart
   function openSensorModal(product: any) {
     activeSensorProduct = product;
@@ -464,6 +483,7 @@
     {:else}
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {#each filteredProducts() as product (product.id)}
+          {@const aiPrediction = predictMangoQuality(product.sensorAvg.ph, product.sensorAvg.tds, product.sensorAvg.moisture)}
           <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden group hover:-translate-y-1">
 
             <!-- Card Top Image (Clickable for Lightbox) -->
@@ -515,14 +535,24 @@
                   {product.description ?? product.deviceName}
                 </p>
 
-                <!-- Price and Stock Details -->
-                <div class="mt-3 flex items-baseline justify-between">
-                  <div>
-                    <span class="text-lg font-black text-orange-600">{formatPrice(product.price)}</span>
-                    <span class="text-xs text-slate-400 font-normal">/{product.unit}</span>
+                <!-- Price, AI Quality Prediction & Stock Details -->
+                <div class="mt-3 space-y-2">
+                  <div class="flex items-baseline justify-between">
+                    <div>
+                      <span class="text-lg font-black text-orange-600">{formatPrice(product.price)}</span>
+                      <span class="text-xs text-slate-400 font-normal">/{product.unit}</span>
+                    </div>
+                    <div class="text-right text-xs">
+                      <span class="text-slate-500 font-medium">Stok: <strong class="text-slate-700">{product.stock} {product.unit}</strong></span>
+                    </div>
                   </div>
-                  <div class="text-right text-xs">
-                    <span class="text-slate-500 font-medium">Stok: <strong class="text-slate-700">{product.stock} {product.unit}</strong></span>
+
+                  <div class="flex items-center justify-between bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                    <div class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-wand-magic-sparkles text-amber-500 text-xs"></i>
+                      <span class="text-xs font-bold {aiPrediction.colorClass}">{aiPrediction.status}</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 font-medium">AI Accuracy: {aiPrediction.confidence}%</span>
                   </div>
                 </div>
               </div>
