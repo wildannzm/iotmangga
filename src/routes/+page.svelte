@@ -571,7 +571,7 @@
                 <div class="flex items-center justify-between text-[11px] text-slate-400">
                   <span>
                     <i class="fa-regular fa-calendar-check mr-1"></i>
-                    Panen: {product.harvestDate ? new Date(product.harvestDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Segar Hari Ini'}
+                    Panen: {product.harvestDate ? new Date(product.harvestDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Segar Hari Ini'}
                   </span>
                   <span class="text-emerald-600 font-medium">Tersedia</span>
                 </div>
