@@ -103,7 +103,7 @@
             <div class="space-y-2 text-sm text-gray-600">
               <p><span class="font-medium">MAC:</span> <span class="font-mono text-xs">{device.macAddress}</span></p>
               <p><span class="font-medium">Firmware:</span> {device.firmwareVer}</p>
-              <p><span class="font-medium">Didaftarkan:</span> {new Date(device.createdAt).toLocaleDateString('id-ID')}</p>
+              <p><span class="font-medium">Didaftarkan:</span> {new Date(device.createdAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}</p>
             </div>
           </div>
           <div class="bg-stone-50 px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-center gap-4">

@@ -218,7 +218,7 @@
 
   function exportToExcel() {
     const dataForExcel = allSensorData.map(row => ({
-      'Waktu': new Date(row.createdAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      'Waktu': new Date(row.createdAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' }),
       'Nama Perangkat': row.deviceName,
       'MAC Address': row.deviceMac,
       'Kelembapan (%)': Number(row.moisture.toFixed(1)),
@@ -446,7 +446,7 @@
             {#each paginatedData as row}
               <tr class="hover:bg-stone-50 transition-colors">
                 <td class="px-4 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(row.createdAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  {new Date(row.createdAt).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Asia/Jakarta' })}
                 </td>
                 <td class="px-4 sm:px-6 py-4 whitespace-nowrap">
                   <a href="/dashboard/devices/{row.deviceId}" class="text-sm font-medium text-gray-900 hover:text-amber-600 underline-offset-2 hover:underline">
@@ -481,7 +481,7 @@
                   </a>
                   <p class="text-xs text-gray-500 font-mono mt-0.5">{row.deviceMac}</p>
                 </div>
-                <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">{new Date(row.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
+                <span class="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-md border border-gray-200">{new Date(row.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })}</span>
               </div>
               <div class="grid grid-cols-3 gap-2 text-center mt-3">
                 <div class="bg-stone-50 p-2 rounded-lg border border-gray-100">

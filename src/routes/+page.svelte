@@ -199,7 +199,17 @@
     ctx.clearRect(0, 0, width, height);
 
     const history = activeSensorDevice.history;
-    const dates = history.dates && history.dates.length ? history.dates : ['01/08', '02/08', '03/08', '04/08', '05/08', '06/08', '07/08'];
+    const fallbackDates = ['01/08', '02/08', '03/08', '04/08', '05/08', '06/08', '07/08'];
+    const rawDates = history.dates && history.dates.length ? history.dates : fallbackDates;
+    const dates = rawDates.map((d: string) => {
+      if (d.length <= 10) return d;
+      const dt = new Date(d);
+      const day = String(dt.getDate()).padStart(2, '0');
+      const month = String(dt.getMonth() + 1).padStart(2, '0');
+      const hours = String(dt.getHours()).padStart(2, '0');
+      const mins = String(dt.getMinutes()).padStart(2, '0');
+      return `${day}/${month} ${hours}:${mins}`;
+    });
     const rawValues = history[activeChartMetric] && history[activeChartMetric].length
       ? history[activeChartMetric]
       : (activeChartMetric === 'moisture' ? [70, 72, 75, 74, 76, 75, 75] : activeChartMetric === 'ph' ? [6.8, 6.9, 7.0, 7.1, 7.0, 7.2, 7.1] : [160, 165, 170, 172, 175, 176, 177]);
@@ -571,7 +581,7 @@
                 <div class="flex items-center justify-between text-[11px] text-slate-400">
                   <span>
                     <i class="fa-regular fa-calendar-check mr-1"></i>
-                    Panen: {product.harvestDate ? new Date(product.harvestDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Segar Hari Ini'}
+                    Panen: {product.harvestDate ? new Date(product.harvestDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }) : 'Segar Hari Ini'}
                   </span>
                   <span class="text-emerald-600 font-medium">Tersedia</span>
                 </div>

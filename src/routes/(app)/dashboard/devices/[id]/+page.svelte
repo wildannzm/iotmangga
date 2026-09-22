@@ -327,7 +327,7 @@
             <option value="">-- Jangan Perbarui (Pertahankan Versi Saat Ini) --</option>
             {#each data.firmwares as fw}
               <option value={fw.id} selected={fw.id === data.device.targetFirmwareId}>
-                Versi {fw.version} (Dirilis: {new Date(fw.createdAt).toLocaleDateString('id-ID')})
+                Versi {fw.version} (Dirilis: {new Date(fw.createdAt).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })})
               </option>
             {/each}
           </select>
@@ -619,7 +619,7 @@
                   <p class="text-base font-bold text-amber-600">{formatPrice(product.price)}<span class="text-xs font-normal text-gray-400">/{product.unit}</span></p>
                   <p class="text-xs text-gray-500">Stok: {product.stock} {product.unit}</p>
                   {#if product.harvestDate}
-                    <p class="text-xs text-gray-400 mt-1">Panen: {new Date(product.harvestDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                    <p class="text-xs text-gray-400 mt-1">Panen: {new Date(product.harvestDate).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })}</p>
                   {/if}
                 </div>
                 <div class="flex items-center gap-2 mt-3 pt-3 border-t border-gray-50">
