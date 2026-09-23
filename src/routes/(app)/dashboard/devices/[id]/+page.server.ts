@@ -78,6 +78,11 @@ export const actions: Actions = {
       throw redirect(302, '/login');
     }
 
+    const device = await prisma.device.findUnique({ where: { id: params.id } });
+    if (!device || device.userId !== locals.user.id) {
+      return fail(403, { error: 'Akses ditolak.' });
+    }
+
     const data = await request.formData();
     const targetFirmwareId = data.get('targetFirmwareId')?.toString();
 
@@ -85,7 +90,6 @@ export const actions: Actions = {
       await prisma.device.update({
         where: { id: params.id },
         data: { 
-          // If empty string is passed (for clearing target), set to null
           targetFirmwareId: targetFirmwareId ? targetFirmwareId : null 
         }
       });

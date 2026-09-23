@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ locals, setHeaders }) => {
     include: {
       sensorData: {
         orderBy: { createdAt: 'desc' },
-        take: 25
+        take: 500
       }
     }
   });

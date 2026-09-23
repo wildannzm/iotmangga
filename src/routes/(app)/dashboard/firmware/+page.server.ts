@@ -3,6 +3,8 @@ import type { Actions, PageServerLoad } from './$types';
 import { prisma } from '$lib/server/prisma';
 import { supabaseAdmin } from '$lib/server/supabaseAdmin';
 
+const MAX_FIRMWARE_SIZE = 10 * 1024 * 1024; // 10 MB
+
 export const load: PageServerLoad = async ({ locals }) => {
   if (!locals.user) {
     throw redirect(302, '/login');
@@ -29,6 +31,10 @@ export const actions: Actions = {
 
     if (!version || !file || file.size === 0) {
       return fail(400, { error: 'Versi dan file .bin wajib diisi.' });
+    }
+
+    if (file.size > MAX_FIRMWARE_SIZE) {
+      return fail(400, { error: 'Ukuran file terlalu besar. Maksimal 10 MB.' });
     }
 
     if (!file.name.endsWith('.bin')) {

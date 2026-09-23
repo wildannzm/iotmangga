@@ -28,9 +28,11 @@
 
   let filteredDevices = $derived(devices);
 
-  // --- Table Pagination Logic ---
-  let currentPage = $state(1);
-  const itemsPerPage = 25;
+  // Chart only needs last 25 data points per device
+  let chartDevices = $derived(filteredDevices.map(d => ({
+    ...d,
+    sensorData: d.sensorData.slice(0, 25)
+  })));
 
   let allSensorData = $derived.by(() => {
     const all = [];
@@ -49,11 +51,13 @@
     return all;
   });
 
+  // --- Table Pagination ---
+  let currentPage = $state(1);
+  const itemsPerPage = 25;
   let totalPages = $derived(Math.max(1, Math.ceil(allSensorData.length / itemsPerPage)));
   let paginatedData = $derived(allSensorData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage));
 
   $effect(() => {
-    // Ensure currentPage is valid if data changes
     if (currentPage > totalPages && totalPages > 0) {
       currentPage = totalPages;
     }
@@ -74,7 +78,7 @@
   let chartLabels = $derived.by(() => {
     let maxLen = 0;
     let bestDevice = null;
-    for (const d of filteredDevices) {
+    for (const d of chartDevices) {
       if (d.sensorData.length > maxLen) {
         maxLen = d.sensorData.length;
         bestDevice = d;
@@ -95,7 +99,7 @@
 
   let chartDataMoisture = $derived({
     labels: chartLabels,
-    datasets: filteredDevices.map((device, i) => {
+    datasets: chartDevices.map((device, i) => {
       const data = device.sensorData.map(d => d.moisture).reverse();
       const paddedData = [...Array(Math.max(0, chartLabels.length - data.length)).fill(null), ...data];
       return {
@@ -112,7 +116,7 @@
 
   let chartDataPh = $derived({
     labels: chartLabels,
-    datasets: filteredDevices.map((device, i) => {
+    datasets: chartDevices.map((device, i) => {
       const data = device.sensorData.map(d => d.ph).reverse();
       const paddedData = [...Array(Math.max(0, chartLabels.length - data.length)).fill(null), ...data];
       return {
@@ -129,7 +133,7 @@
 
   let chartDataTds = $derived({
     labels: chartLabels,
-    datasets: filteredDevices.map((device, i) => {
+    datasets: chartDevices.map((device, i) => {
       const data = device.sensorData.map(d => d.tds).reverse();
       const paddedData = [...Array(Math.max(0, chartLabels.length - data.length)).fill(null), ...data];
       return {
@@ -190,7 +194,7 @@
           const index = devices.findIndex(d => d.id === newRecord.deviceId);
           if (index !== -1) {
             // Re-assign the array to trigger deep reactivity and keep last 25
-            devices[index].sensorData = [newRecord, ...devices[index].sensorData].slice(0, 25);
+            devices[index].sensorData = [newRecord, ...devices[index].sensorData];
           }
         }
       )
@@ -501,7 +505,7 @@
           {/each}
         </div>
       </div>
-      
+
       <!-- Pagination Controls -->
       <div class="px-4 py-3 border-t border-gray-200 bg-stone-50 flex items-center justify-between sm:px-6">
         <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
@@ -512,7 +516,7 @@
           </div>
           <div>
             <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
-              <button 
+              <button
                 disabled={currentPage === 1}
                 onclick={() => currentPage--}
                 class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -520,12 +524,12 @@
                 <span class="sr-only">Sebelumnya</span>
                 <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
               </button>
-              
+
               <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
                 Halaman {currentPage} dari {totalPages}
               </span>
 
-              <button 
+              <button
                 disabled={currentPage === totalPages}
                 onclick={() => currentPage++}
                 class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -536,10 +540,10 @@
             </nav>
           </div>
         </div>
-        
+
         <!-- Mobile Pagination -->
         <div class="flex items-center justify-between w-full sm:hidden">
-          <button 
+          <button
             disabled={currentPage === 1}
             onclick={() => currentPage--}
             class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
@@ -547,7 +551,7 @@
             Sebelumnya
           </button>
           <span class="text-sm text-gray-700 font-medium">Hal {currentPage}/{totalPages}</span>
-          <button 
+          <button
             disabled={currentPage === totalPages}
             onclick={() => currentPage++}
             class="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"

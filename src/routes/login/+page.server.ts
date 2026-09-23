@@ -1,6 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { prisma } from '$lib/server/prisma';
+import { deleteSession } from '$lib/server/sessionCache';
 import bcrypt from 'bcryptjs';
 
 export const load: PageServerLoad = async ({ locals }) => {
@@ -60,6 +61,7 @@ export const actions: Actions = {
   logout: async ({ cookies }) => {
     const sessionId = cookies.get('session');
     if (sessionId) {
+      deleteSession(sessionId);
       try {
         await prisma.session.delete({ where: { id: sessionId } });
       } catch (e) {

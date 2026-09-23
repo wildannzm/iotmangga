@@ -61,6 +61,7 @@ model Device {
   products          Product[]
 
   @@index([apiKey])
+  @@index([userId])
 }
 
 model SensorData {
